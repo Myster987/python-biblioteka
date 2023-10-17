@@ -1,7 +1,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 from biblioteka_baza_danych import DataBase, User
-
+from CTkListbox import CTkListbox
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -97,7 +97,6 @@ class SignInScreen(ctk.CTk):
         self.grid_columnconfigure((0, 1), weight=1)
         self.resizable(False, False)
 
-
         self.welcome_text_label = ctk.CTkLabel(self, text="Welcome Back!", font=("Roboto", 25, "bold"))
         self.welcome_text_label.grid(row=0, column=0, padx=20, pady=(10, 0), columnspan=2)
 
@@ -160,6 +159,7 @@ class UserScreen(ctk.CTk):
         super().__init__()
         self.title("Library")
         self.current_user = user
+        self.used_books = None
 
         self.window_width = 350
         self.window_height = 565
@@ -173,7 +173,7 @@ class UserScreen(ctk.CTk):
         self.grid_columnconfigure((0, 1), weight=1)
         self.resizable(False, False)
 
-        self._profile_screen()
+        self._borrow_book_screen()
 
     def _profile_screen(self):
         self._clear_window()
@@ -182,7 +182,7 @@ class UserScreen(ctk.CTk):
         menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
         menu.grid(row=0, column=0, padx=10, pady=8, sticky="w", columnspan=2)
 
-        profile_text_label = ctk.CTkLabel(self, text="Profile:", font=("Roboto", 30, "bold"))
+        profile_text_label = ctk.CTkLabel(self, text="Profile:", font=("Roboto", 32, "bold"))
         profile_text_label.grid(row=0, column=1, padx=(10, (self.window_width // 2 - 75)), pady=8, columnspan=2)
 
         email_data_frame = ctk.CTkFrame(self, fg_color="#2e2e2e", border_width=3)
@@ -222,6 +222,59 @@ class UserScreen(ctk.CTk):
             book = ctk.CTkLabel(users_books_frame, text=f"{row.title} | {row.categories}", font=("Roboto", 12))
             book.grid(row=i, column=0, padx=4, pady=1, sticky="we")
 
+    def _borrow_book_screen(self):
+        self._clear_window()
+        self.current_page = "Borrow books"
+        
+        def search_category(choice):
+            if choice not in categories_combobox._values:
+                categories_combobox.set("Error!")
+            else:
+                categories_combobox_var.set(choice)
+                clear_listbox()
+
+        def clear_listbox():
+            books_listbox.delete("all")    
+            for i in range(2):
+                books_listbox.insert(i, "")
+            else:            
+                books_listbox.insert(i + 1, "\t\tNothing here")
+
+        def update_listbox(*args):
+            to_search = search_bar.get()
+            if to_search.replace(" ", "") == "":
+                return
+            
+            arguments = {categories_combobox_var.get(): to_search}
+
+            self.used_books = app.db.find_book(**arguments)
+            books_listbox.delete("all")
+            
+            for i, row in enumerate(self.used_books.head(300).itertuples(index=False)):
+                books_listbox.insert(i, f"{row.title}")
+
+        menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
+        menu.grid(row=0, column=0, padx=10, pady=8, sticky="w", columnspan=2)
+
+        borrow_book_text = ctk.CTkLabel(self, text="Library", font=("Roboto", 32, "bold"))
+        borrow_book_text.grid(row=0, column=1, padx=(10, (self.window_width // 2 - 90)), pady=(8, 15), columnspan=2)
+
+        search_bar = ctk.CTkEntry(self, height=38, placeholder_text="Type something to search...", placeholder_text_color="gray", font=("Roboto", 20))
+        search_bar.grid(row=1, column=0, padx=10, pady=(15, 5), sticky="we", columnspan=2)
+
+        search_bar.bind("<Return>", update_listbox)
+
+        categories_combobox_var = ctk.StringVar(value="title")
+
+        categories_combobox = ctk.CTkComboBox(self, font=("Roboto", 16), variable=categories_combobox_var, values=["title", "subtitle", "authors", "categories", "published year", "average rating", "num pages"], command=search_category)
+        categories_combobox.set("title")
+        categories_combobox.grid(row=2, column=0, padx=10, pady=5, sticky="we", columnspan=2)
+
+        books_listbox = CTkListbox(self, font=("Roboto", 13), multiple_selection=True, command=lambda x: print(books_listbox.get()))
+        books_listbox.grid_columnconfigure(0, weight=1)
+        clear_listbox()
+        books_listbox.grid(row=3, column=0, padx=10, pady=15, sticky="we", columnspan=2)
+
 
     def _clear_window(self):
         for element in self.winfo_children():
@@ -245,6 +298,8 @@ class UserScreen(ctk.CTk):
                 self._close_user_screen()
             else:
                 return
+        elif command == "Borrow books":
+            self._borrow_book_screen()
 
     def return_postion_of_window(self):
         return (self.winfo_x(), self.winfo_y())
@@ -275,7 +330,7 @@ class App:
             self.user_screen.protocol("WM_DELETE_WINDOW", self.end)
         else:
             self.user_screen.current_user = user
-            self.user_screen._profile_screen()
+            self.user_screen._borrow_book_screen()
             self.user_screen.deiconify()
         
         self.user_screen.set_new_postion_of_window()

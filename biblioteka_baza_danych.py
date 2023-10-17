@@ -13,7 +13,6 @@ class DataBase:
             self.__dbconfig = self._read_db_config()
 
             self.conn = MySQLConnection(**self.__dbconfig)
-            self.cursor = self.conn.cursor()
         except MySqlError as error:
             print(f"{error = }")
 
@@ -39,8 +38,6 @@ class DataBase:
         return db
 
     def close_db(self):
-        if self.cursor is not None:
-            self.cursor.close()
         if self.conn is not None:
             self.conn.close()
     
@@ -49,8 +46,10 @@ class DataBase:
         SELECT in_users_table(%s, %s);
         CALL add_user(%s, %s);
         """
-        result = next(self.cursor.execute(sql, (user_email, user_password) * 2, multi=True))
-        return 0 == result.fetchone()[0] 
+        with self.conn.cursor() as cursor:
+            result = next(cursor.execute(sql, (user_email, user_password) * 2, multi=True))
+            self.conn.commit()
+            return 0 == result.fetchone()[0] 
 
     def delete_user(self, user_email: str, user_password: str):
         sql = """
@@ -64,40 +63,32 @@ class DataBase:
         """
         self._execute_query(sql, (user_id, book_id))
 
-    def find_book(self, book_id=-1, book_title="NULL", book_subtitle="NULL", book_authors="NULL", book_categories="NULL") -> pd.DataFrame:
-        sql = """
-        CALL find_book(%s, %s, %s, %s, %s)
-        """
-        result = next(self.cursor.execute(sql, (book_id, book_title, book_subtitle, book_authors, book_categories), multi=True))
-        df = pd.DataFrame.from_records(result)
-        df.rename(columns={
-            0: "book_id", 1: "title", 2: "subtitle", 
-            3: "authors", 4: "categories", 5: "thumbnail", 
-            6: "description", 7: "published_year", 8: "average_rating",
-            9: "num_pages"}, inplace=True)
+    def find_book(self, id=-1, title="NULL", subtitle="NULL", authors="NULL", categories="NULL") -> pd.DataFrame:
+        if title == "NULL" and subtitle == "NULL" and authors == "NULL" and categories == "NULL":
+            sql = "SELECT * FROM books"
+            with self.conn.cursor() as cursor:
+                cursor.execute(sql)
+                df = pd.DataFrame.from_records(cursor.fetchall())
+                return self._set_dtypes(df)
         
-        return self._set_dtypes(df)
+        with self.conn.cursor() as cursor:
+            cursor.callproc("find_book", (id, title, subtitle, authors, categories))
+            df = pd.DataFrame.from_records(cursor._stored_results[0].fetchall())
+            return self._set_dtypes(df)
 
     def find_users_books(self, user_id: int) -> pd.DataFrame:
-        sql = """
-        CALL find_users_books(%s)
-        """
-        result = next(self.cursor.execute(sql, (user_id,), multi=True))
-        df = pd.DataFrame.from_records(result)
-        df.rename(columns={
-            0: "book_id", 1: "title", 2: "subtitle", 
-            3: "authors", 4: "categories", 5: "thumbnail", 
-            6: "description", 7: "published_year", 8: "average_rating",
-            9: "num_pages"}, inplace=True)
-        
-        return self._set_dtypes(df)
+        with self.conn.cursor() as cursor:
+            cursor.callproc("find_users_books", (user_id,))
+            df = pd.DataFrame.from_records(cursor._stored_results[0].fetchall())
+            return self._set_dtypes(df)
 
     def check_user_exists(self, user_email, user_password) -> bool:
         sql = """
         SELECT in_users_table(%s, %s)
         """
-        result = next(self.cursor.execute(sql, (user_email, user_password), multi=True))
-        return 1 in result.fetchone()
+        with self.conn.cursor() as cursor:
+            cursor.execute(sql, (user_email, user_password))
+            return 1 in cursor.fetchone()
     
     def return_user_data(self, user_email, user_password) -> User:
         sql = """
@@ -105,17 +96,21 @@ class DataBase:
         FROM users
         WHERE user_email = %s AND user_password = %s
         """
-        self.cursor.execute(sql, (user_email, user_password))
-        result = self.cursor.fetchone() 
-        return User(*result)
+        with self.conn.cursor() as cursor:
+            cursor.execute(sql, (user_email, user_password))
+            result = cursor.fetchone() 
+            return User(*result)
 
-    def _execute_query(self, sql, values):
-        self.cursor.execute(sql, values)
-        self.conn.commit()
+    def _rename_df(self, old_df: pd.DataFrame) -> pd.DataFrame:
+        return old_df.rename(columns={
+            0: "id", 1: "title", 2: "subtitle", 
+            3: "authors", 4: "categories", 5: "thumbnail", 
+            6: "description", 7: "published_year", 8: "average_rating",
+            9: "num_pages"})
 
     def _set_dtypes(self, old_df: pd.DataFrame) -> pd.DataFrame:
-        df = old_df
-        df["book_id"] = df["book_id"].astype("int32")
+        df = self._rename_df(old_df)
+        df["id"] = df["id"].astype("int32")
         df["title"] = df["title"].astype("category")
         df["subtitle"] = df["subtitle"].astype("category")
         df["authors"] = df["authors"].astype("category")
@@ -126,16 +121,22 @@ class DataBase:
         df["num_pages"] = df["num_pages"].astype("int16")
 
         return df
+    
+    def _execute_query(self, sql, values):
+        with self.conn.cursor() as cursor:
+            cursor.execute(sql, values)
+            self.conn.commit()
 
     def query(self, sql, *args):
-        result = next(self.cursor.execute(sql, args, multi=True))
-        return result.fetchall()
+        with self.conn.cursor as cursor:
+            cursor.execute(sql, args)
+            return cursor.fetchall()
 
 
 if __name__ == "__main__":
     db = DataBase()
 
-    db.return_user_data(user_email="maciek987@gmail.com", user_password="123456")
+    db.find_book(subtitle="No subtitle")
 
     db.close_db()
     
