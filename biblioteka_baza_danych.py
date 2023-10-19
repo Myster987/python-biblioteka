@@ -40,6 +40,11 @@ class DataBase:
     def close_db(self):
         if self.conn is not None:
             self.conn.close()
+
+    def borrow_books(self, user_id: int, books_id: list[str] | tuple[str]):
+        with self.conn.cursor() as cursor:
+            for i in range(len(books_id)):
+                cursor.callproc("borrow_book", (user_id, books_id[i]))
     
     def add_user(self, user_email: str, user_password: str):
         sql = """
@@ -69,18 +74,18 @@ class DataBase:
             with self.conn.cursor() as cursor:
                 cursor.execute(sql)
                 df = pd.DataFrame.from_records(cursor.fetchall())
-                return self._set_dtypes(df)
+                return self._rename_df(df)
         
         with self.conn.cursor() as cursor:
             cursor.callproc("find_book", (id, title, subtitle, authors, categories))
             df = pd.DataFrame.from_records(cursor._stored_results[0].fetchall())
-            return self._set_dtypes(df)
+            return self._rename_df(df)
 
     def find_users_books(self, user_id: int) -> pd.DataFrame:
         with self.conn.cursor() as cursor:
             cursor.callproc("find_users_books", (user_id,))
             df = pd.DataFrame.from_records(cursor._stored_results[0].fetchall())
-            return self._set_dtypes(df)
+            return self._rename_df(df.rename(columns={10: "date"}))
 
     def check_user_exists(self, user_email, user_password) -> bool:
         sql = """
@@ -107,20 +112,6 @@ class DataBase:
             3: "authors", 4: "categories", 5: "thumbnail", 
             6: "description", 7: "published_year", 8: "average_rating",
             9: "num_pages"})
-
-    def _set_dtypes(self, old_df: pd.DataFrame) -> pd.DataFrame:
-        df = self._rename_df(old_df)
-        df["id"] = df["id"].astype("int32")
-        df["title"] = df["title"].astype("category")
-        df["subtitle"] = df["subtitle"].astype("category")
-        df["authors"] = df["authors"].astype("category")
-        df["categories"] = df["categories"].astype("category")
-        df["thumbnail"] = df["thumbnail"].astype("category")
-        df["description"] = df["description"].astype("category")
-        df["published_year"] = df["published_year"].astype("int16")
-        df["num_pages"] = df["num_pages"].astype("int16")
-
-        return df
     
     def _execute_query(self, sql, values):
         with self.conn.cursor() as cursor:

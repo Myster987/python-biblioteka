@@ -225,6 +225,7 @@ class UserScreen(ctk.CTk):
     def _borrow_book_screen(self):
         self._clear_window()
         self.current_page = "Borrow books"
+        self.grid_rowconfigure(3, weight=1)
         
         def search_category(choice):
             if choice not in categories_combobox._values:
@@ -235,7 +236,7 @@ class UserScreen(ctk.CTk):
 
         def clear_listbox():
             books_listbox.delete("all")    
-            for i in range(2):
+            for i in range(4):
                 books_listbox.insert(i, "")
             else:            
                 books_listbox.insert(i + 1, "\t\tNothing here")
@@ -251,7 +252,20 @@ class UserScreen(ctk.CTk):
             books_listbox.delete("all")
             
             for i, row in enumerate(self.used_books.head(300).itertuples(index=False)):
-                books_listbox.insert(i, f"{row.title}")
+                books_listbox.insert(i, f"id{row.id} - {row.title}")
+
+        def borrow_books():
+            books = books_listbox.get()
+            
+            if books is None:
+                return
+
+            try:
+                selected_books = [int(book.split(" - ")[0][2:]) for book in books]
+            except Exception as error:
+                pass
+            else:
+                app.db.borrow_books(self.current_user.id, selected_books)
 
         menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
         menu.grid(row=0, column=0, padx=10, pady=8, sticky="w", columnspan=2)
@@ -270,10 +284,13 @@ class UserScreen(ctk.CTk):
         categories_combobox.set("title")
         categories_combobox.grid(row=2, column=0, padx=10, pady=5, sticky="we", columnspan=2)
 
-        books_listbox = CTkListbox(self, font=("Roboto", 13), multiple_selection=True, command=lambda x: print(books_listbox.get()))
+        books_listbox = CTkListbox(self, font=("Roboto", 13), multiple_selection=True)
         books_listbox.grid_columnconfigure(0, weight=1)
         clear_listbox()
-        books_listbox.grid(row=3, column=0, padx=10, pady=15, sticky="we", columnspan=2)
+        books_listbox.grid(row=3, column=0, padx=10, pady=15, sticky="nswe", columnspan=2)
+
+        borrow_books_button = ctk.CTkButton(self, text="Borrow books", font=("Roboto", 35, "bold"), command=borrow_books)
+        borrow_books_button.grid(row=4, column=0, padx=10, pady=10, sticky="wes", columnspan=2)
 
 
     def _clear_window(self):
