@@ -1,4 +1,7 @@
 import customtkinter as ctk
+import urllib.request
+from PIL import Image
+from io import BytesIO
 from tkinter import messagebox
 from biblioteka_baza_danych import DataBase, User
 from CTkListbox import CTkListbox
@@ -179,7 +182,7 @@ class UserScreen(ctk.CTk):
         self._clear_window()
         self.current_page = "Profile"
 
-        menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
+        menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Books info", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
         menu.grid(row=0, column=0, padx=10, pady=8, sticky="w", columnspan=2)
 
         profile_text_label = ctk.CTkLabel(self, text="Profile:", font=("Roboto", 32, "bold"))
@@ -367,6 +370,140 @@ class UserScreen(ctk.CTk):
         borrow_books_button = ctk.CTkButton(self, text="Return books", font=("Roboto", 35, "bold"), command=delete_books)
         borrow_books_button.grid(row=4, column=0, padx=10, pady=10, sticky="wes", columnspan=2)
 
+    def _books_info_screen(self):
+        self._clear_window()
+        self.current_page = "Books info"
+        self.grid_rowconfigure(3, weight=1)
+        
+        def search_category(choice):
+            if choice not in categories_combobox._values:
+                categories_combobox.set("Error!")
+            else:
+                categories_combobox_var.set(choice)
+                clear_listbox()
+
+        def clear_listbox():
+            books_listbox.delete("all")    
+            for i in range(4):
+                books_listbox.insert(i, "")
+            else:            
+                books_listbox.insert(i + 1, "\t\tNothing here")
+
+        def update_listbox(*args):
+            to_search = search_bar.get()
+            if to_search.replace(" ", "") == "":
+                return
+            elif to_search.replace(" ", "") == "#all":
+                sql = "SELECT * FROM books"
+                self.used_books = app.db.query(sql)
+                books_listbox.delete("all")
+
+                for i, row in enumerate(self.used_books.head(300).itertuples(index=False)):
+                    books_listbox.insert(i, f"id{row.id} - {row.title}")
+                return  
+            
+            arguments = {categories_combobox_var.get(): to_search}
+
+            self.used_books = app.db.find_book(**arguments)
+            books_listbox.delete("all")
+            
+            for i, row in enumerate(self.used_books.head(300).itertuples(index=False)):
+                books_listbox.insert(i, f"id{row.id} - {row.title}")
+
+        def view_info():
+            books = books_listbox.get()
+            
+            if books is None:
+                return
+
+            try:
+                selected_books = int(books.split(" - ")[0][2:])
+            except Exception as error:
+                pass
+            else:
+                book = self.used_books.loc[self.used_books["id"] == selected_books].to_dict(orient="records")[0]
+
+                info_window = ctk.CTkToplevel()
+                info_window.grid_rowconfigure((0, 1, 2, 3, 4, 5, 6), weight=1)
+                info_window.wm_title("Book info:")
+                info_window.geometry(f"300x600+{(self.screen_width - info_window.winfo_width() // 2) // 2}+{(self.screen_height - info_window.winfo_height() // 2) // 2}")
+                info_window.resizable(False, False)
+
+                if not book["thumbnail"] == "Unknow":
+                    with urllib.request.urlopen(book["thumbnail"]) as url_res:
+                        img_data = url_res.read()
+
+                    thumbnail_img = ctk.CTkImage(Image.open(BytesIO(img_data)), size=(280, 260))
+
+                    image_label = ctk.CTkLabel(info_window, text="", image=thumbnail_img)
+                    image_label.grid(row=1, column=0, padx=10, pady=10, columnspan=2, sticky="we")
+                else:
+                    image_label = ctk.CTkLabel(info_window, text="Unknow thumbnail", font=("Roboto", 30, "bold"))
+                    image_label.grid(row=1, column=0, padx=10, pady=10, columnspan=2, sticky="we")
+
+                title_scrollableframe = ctk.CTkScrollableFrame(info_window, height=45)
+                title_scrollableframe._scrollbar.configure(height=0)
+                title_scrollableframe.grid(row=0, column=0, padx=10, pady=10, columnspan=2, rowspan=1, sticky="we")
+
+                title_label = ctk.CTkLabel(title_scrollableframe, text=book["title"], font=("Roboto", 18), wraplength=260)
+                title_label.pack(padx=5, pady=5)
+
+                description_frame = ctk.CTkScrollableFrame(info_window, width=100, label_text="description:", label_font=("Roboto", 13, "bold"))
+                description_frame._scrollbar.configure(height=0)
+                description_frame.grid(row=2, column=0, padx=(10, 4), pady=(5, 10), rowspan=6, sticky="we")
+
+                description_text = ctk.CTkLabel(description_frame, text=book["description"], font=("Roboto", 10), wraplength=85)
+                description_text.pack(padx=10, pady=10)
+
+                subtitle_frame = ctk.CTkScrollableFrame(info_window, height=30, label_text="subtitle:", label_font=("Roboto", 13, "bold"), width=100)
+                subtitle_frame._scrollbar.configure(height=0)
+                subtitle_frame.grid(row=2, column=1, padx=(4, 10), pady=5, sticky="we")
+
+                subtitle_label = ctk.CTkLabel(subtitle_frame, text=book["subtitle"], font=("Roboto", 12), wraplength=90)
+                subtitle_label.pack(padx=3, pady=3)
+
+                authors_frame = ctk.CTkScrollableFrame(info_window, height=30, label_text="author(s):", label_font=("Roboto", 13, "bold"), width=100)
+                authors_frame._scrollbar.configure(height=0)
+                authors_frame.grid(row=3, column=1, padx=(4, 10), pady=5, sticky="we")
+
+                authors_label = ctk.CTkLabel(authors_frame, text=book["authors"], font=("Roboto", 12), wraplength=90)
+                authors_label.pack(padx=4, pady=3)
+
+                published_year_label = ctk.CTkLabel(info_window, text=f"published in: {book["published_year"]}", font=("Roboto", 12))
+                published_year_label.grid(row=4, column=1, padx=(4, 10), pady=5, sticky="we")
+
+                average_rating_label = ctk.CTkLabel(info_window, text=f"Average rating: {book["average_rating"]}", font=("Roboto", 12))
+                average_rating_label.grid(row=5, column=1, padx=(4, 10), pady=5, sticky="we")
+
+                num_pages_label = ctk.CTkLabel(info_window, text=f"Number of pages: {book["num_pages"]}", font=("Roboto", 12))
+                num_pages_label.grid(row=6, column=1, padx=(4, 10), pady=(5, 10), sticky="we")
+
+        menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Books info", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
+        menu.grid(row=0, column=0, padx=10, pady=8, sticky="w", columnspan=2)
+
+        info_book_text = ctk.CTkLabel(self, text="Library", font=("Roboto", 32, "bold"))
+        info_book_text.grid(row=0, column=1, padx=(10, (self.window_width // 2 - 90)), pady=(8, 15), columnspan=2)
+
+        search_bar = ctk.CTkEntry(self, height=38, placeholder_text="Type something to search...", placeholder_text_color="gray", font=("Roboto", 20))
+        search_bar.grid(row=1, column=0, padx=10, pady=(15, 5), sticky="we", columnspan=2)
+
+        search_bar.bind("<Return>", update_listbox)
+
+        categories_combobox_var = ctk.StringVar(value="title")
+
+        categories_combobox = ctk.CTkComboBox(self, font=("Roboto", 16), variable=categories_combobox_var, values=["title", "subtitle", "authors", "categories", "published year", "average rating", "num pages"], command=search_category)
+        categories_combobox.set("title")
+        categories_combobox.grid(row=2, column=0, padx=10, pady=5, sticky="we", columnspan=2)
+
+        books_listbox = CTkListbox(self, font=("Roboto", 13), multiple_selection=False)
+        books_listbox.grid_columnconfigure(0, weight=1)
+        clear_listbox()
+        books_listbox.grid(row=3, column=0, padx=10, pady=15, sticky="nswe", columnspan=2)
+
+        view_books_button = ctk.CTkButton(self, text="View info", font=("Roboto", 35, "bold"), command=view_info)
+        view_books_button.grid(row=4, column=0, padx=10, pady=10, sticky="wes", columnspan=2)
+
+
     def _clear_window(self):
         for element in self.winfo_children():
             element.destroy()
@@ -392,7 +529,7 @@ class UserScreen(ctk.CTk):
         elif command == "Borrow books":
             self._borrow_book_screen()
         elif command == "Books info":
-            pass
+            self._books_info_screen()
         elif command == "Return books":
             self._return_books_screen()
 

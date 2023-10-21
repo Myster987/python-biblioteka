@@ -118,9 +118,10 @@ class DataBase:
             self.conn.commit()
 
     def query(self, sql, *args):
-        with self.conn.cursor as cursor:
+        with self.conn.cursor() as cursor:
             cursor.execute(sql, args)
-            return cursor.fetchall()
+            df = pd.DataFrame.from_records(cursor.fetchall())
+            return self._rename_df(df)
 
 
 if __name__ == "__main__":
