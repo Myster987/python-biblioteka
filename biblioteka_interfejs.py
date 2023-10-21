@@ -267,7 +267,7 @@ class UserScreen(ctk.CTk):
             else:
                 app.db.borrow_books(self.current_user.id, selected_books)
 
-        menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
+        menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Books info", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
         menu.grid(row=0, column=0, padx=10, pady=8, sticky="w", columnspan=2)
 
         borrow_book_text = ctk.CTkLabel(self, text="Library", font=("Roboto", 32, "bold"))
@@ -292,6 +292,80 @@ class UserScreen(ctk.CTk):
         borrow_books_button = ctk.CTkButton(self, text="Borrow books", font=("Roboto", 35, "bold"), command=borrow_books)
         borrow_books_button.grid(row=4, column=0, padx=10, pady=10, sticky="wes", columnspan=2)
 
+    def _return_books_screen(self):
+        self._clear_window()
+        self.current_page = "Return books"
+        self.grid_rowconfigure(3, weight=1)
+
+        def search_category(choice):
+            if choice not in categories_combobox._values:
+                categories_combobox.set("Error!")
+            else:
+                categories_combobox_var.set(choice)
+                clear_listbox()
+
+        def clear_listbox():
+            books_listbox.delete("all")    
+            for i in range(4):
+                books_listbox.insert(i, "")
+            else:            
+                books_listbox.insert(i + 1, "\t\tNothing here")
+
+        def update_listbox(*args):
+            to_search = search_bar.get()
+            if to_search.replace(" ", "") == "":
+                return
+            
+            self.used_books = app.db.find_users_books(self.current_user.id)
+            books_listbox.delete("all")
+
+            if to_search == "#all":  
+                for i, row in enumerate(self.used_books.head(300).itertuples(index=False)):
+                    books_listbox.insert(i, f"id{row.id} - {row.title}")
+                return
+
+            self.used_books = self.used_books[self.used_books[categories_combobox_var.get()].str.contains(to_search, regex=False)]
+
+            for i, row in enumerate(self.used_books.head(300).itertuples(index=False)):
+                    books_listbox.insert(i, f"id{row.id} - {row.title}")
+
+        def delete_books():
+            books = books_listbox.get()
+            
+            if books is None:
+                return
+
+            try:
+                selected_books = [int(book.split(" - ")[0][2:]) for book in books]
+            except Exception as error:
+                pass
+            else:
+                app.db.delete_users_book(self.current_user.id, selected_books)
+
+        menu = ctk.CTkOptionMenu(self, width=35, height=35, values=["Profile", "Borrow books", "Return books", "Books info", "Sign out", "Delete account"], dynamic_resizing=False, font=("Roboto", 1), command=self._change_page)
+        menu.grid(row=0, column=0, padx=10, pady=8, sticky="w", columnspan=2)
+
+        delete_book_text = ctk.CTkLabel(self, text="Library", font=("Roboto", 32, "bold"))
+        delete_book_text.grid(row=0, column=1, padx=(10, (self.window_width // 2 - 90)), pady=(8, 15), columnspan=2)
+
+        search_bar = ctk.CTkEntry(self, height=38, placeholder_text="Type something to search...", placeholder_text_color="gray", font=("Roboto", 20))
+        search_bar.grid(row=1, column=0, padx=10, pady=(15, 5), sticky="we", columnspan=2)
+
+        search_bar.bind("<Return>", update_listbox)
+
+        categories_combobox_var = ctk.StringVar(value="title")
+
+        categories_combobox = ctk.CTkComboBox(self, font=("Roboto", 16), variable=categories_combobox_var, values=["title", "subtitle", "authors", "categories", "published year", "average rating", "num pages"], command=search_category)
+        categories_combobox.set("title")
+        categories_combobox.grid(row=2, column=0, padx=10, pady=5, sticky="we", columnspan=2)
+
+        books_listbox = CTkListbox(self, font=("Roboto", 13), multiple_selection=True)
+        books_listbox.grid_columnconfigure(0, weight=1)
+        clear_listbox()
+        books_listbox.grid(row=3, column=0, padx=10, pady=15, sticky="nswe", columnspan=2)
+
+        borrow_books_button = ctk.CTkButton(self, text="Return books", font=("Roboto", 35, "bold"), command=delete_books)
+        borrow_books_button.grid(row=4, column=0, padx=10, pady=10, sticky="wes", columnspan=2)
 
     def _clear_window(self):
         for element in self.winfo_children():
@@ -317,6 +391,10 @@ class UserScreen(ctk.CTk):
                 return
         elif command == "Borrow books":
             self._borrow_book_screen()
+        elif command == "Books info":
+            pass
+        elif command == "Return books":
+            self._return_books_screen()
 
     def return_postion_of_window(self):
         return (self.winfo_x(), self.winfo_y())

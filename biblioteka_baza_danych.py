@@ -62,11 +62,10 @@ class DataBase:
         """
         self._execute_query(sql, (user_email, user_password))
 
-    def delete_users_book(self, user_id: int, book_id: int):
-        sql = """
-        CALL return_book_to_library(%s, %s)
-        """
-        self._execute_query(sql, (user_id, book_id))
+    def delete_users_book(self, user_id: int, books_id: list[str] | tuple[str]):
+        with self.conn.cursor() as cursor:
+            for i in range(len(books_id)):
+                cursor.callproc("return_book_to_library", (user_id, books_id[i]))
 
     def find_book(self, id=-1, title="NULL", subtitle="NULL", authors="NULL", categories="NULL") -> pd.DataFrame:
         if title == "NULL" and subtitle == "NULL" and authors == "NULL" and categories == "NULL":
